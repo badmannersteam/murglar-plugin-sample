@@ -1,0 +1,14 @@
+.idea
+.gradle
+/*/build
+/build
+out
+
+.DS_Store
+*.log
+cookies*.dat
+preferences*.json
+/captures
+
+/local.properties
+/keystore.jks
