@@ -27,7 +27,7 @@ pluginManagement {
 dependencyResolutionManagement {
     versionCatalogs {
         create("catalog") {
-            version("murglar-plugins", "4.1")
+            version("murglar-plugins", "4.4")
 
             // for core module
             plugin("murglar-plugin-core", "murglar-gradle-plugin-core").versionRef("murglar-plugins")
