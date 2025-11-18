@@ -148,7 +148,6 @@ class SamplePlaylist(
 сообщений, а также объявите и передайте в конструктор `BaseMurglar`:
 
 - идентификатор плагина
-- ссылку на иконку (цветная, 512px PNG)
 - маппинг `Locale`->`Messages`
 - все `Middleware`
 
@@ -163,12 +162,9 @@ class SampleMurglar(
     network: NetworkMiddleware,
     notifications: NotificationMiddleware,
     logger: LoggerMiddleware
-) : BaseMurglar<SampleTrack, SampleMessages>(id, ICON_URL, MESSAGES, preferences, network, notifications, logger) {
+) : BaseMurglar<SampleTrack, SampleMessages>(id, MESSAGES, preferences, network, notifications, logger) {
 
     companion object {
-        private const val ICON_URL =
-            "https://play-lh.googleusercontent.com/aFWiT2lTa9CYBpyPjfgfNHd0r5puwKRGj2rHpdPTNrz2N9LXgN_MbLjePd1OTc0E8Rl1"
-
         private val MESSAGES = mapOf(
             DEFAULT to SampleDefaultMessages,
             RUSSIAN to SampleRussianMessages
@@ -241,8 +237,7 @@ override val possibleFormats = listOf(
 В нем можно при необходимости выполнить различные действия - например, обновить сессию/токены/ключи.
 
 ```kotlin
-@WorkerThread
-override fun onCreate() {
+override suspend fun onCreate() {
     if (!loginResolver.isLogged)
         return
 
@@ -262,8 +257,7 @@ override fun onCreate() {
 который нужно вернуть с уже готовым URL контента:
 
 ```kotlin
-@WorkerThread
-override fun resolveSourceForUrl(track: SampleTrack, source: Source): Source {
+override suspend fun resolveSourceForUrl(track: SampleTrack, source: Source): Source {
     val request = getRequest("${API_V2_DOMAIN}/track/${track.id}/download").build()
     val result = network.execute(request, ResponseConverters.asJsonObject()).result
 
@@ -311,8 +305,7 @@ override fun hasLyrics(track: SampleTrack) = track.hasLyrics
 Для получения самого текста будет вызван метод `getLyrics`, в котором нужно запросить из сервиса текст:
 
 ```kotlin
-@WorkerThread
-override fun getLyrics(track: SampleTrack): Lyrics {
+override suspend fun getLyrics(track: SampleTrack): Lyrics {
     val request = trackRequest(track.id, track.albumId)
     val response = network.execute(request, ResponseConverters.asJsonObject())
 
@@ -356,38 +349,45 @@ override fun getLyrics(track: SampleTrack): Lyrics {
 От плагина требуется только заполнить этот объект данными в методе `getTags`:
 
 ```kotlin
-@WorkerThread
-override fun getTags(track: SampleTrack): Tags {
-    val tags = Tags.Builder()
-        .title(track.title)
-        .subtitle(track.subtitle)
-        .artists(track.artistNames)
-        .genre(track.genre)
-        .explicit(track.explicit)
-        .gain(track.gain)
-        .peak(track.peak)
-        .url(track.serviceUrl)
-        .mediaId(track.mediaId)
+override suspend fun getTags(track: SampleTrack, parent: Node?) = Tags.Builder().apply {
+    title = track.title
+    subtitle = track.subtitle
+    artists = track.artistNames
+    genre = track.genre
+    explicit = track.explicit
+    gain = track.gain
+    peak = track.peak
+    url = track.serviceUrl
+    mediaId = track.mediaId
 
-    if (!track.hasAlbum)
-        return tags.createTags()
+    when {
+        parent is SampleAlbum -> {
+            val positionInAlbum = getTrackPositionInAlbum(parent.id, track.id)
 
-    tags.album(track.albumName)
-        .albumArtist(track.albumArtist)
-        .trackNumber(track.indexInAlbum)
-        .diskNumber(track.volumeNumber)
-        .releaseDate(track.albumReleaseDate)
+            album = parent.title
+            albumArtist = parent.artistName
+            albumType = parent.type
+            trackNumber = positionInAlbum.trackNumberInVolume
+            diskNumber = positionInAlbum.trackVolumeNumber
+            totalDisks = positionInAlbum.totalDisks
+            totalTracks = positionInAlbum.totalTracks
+            releaseDate = parent.releaseDate
+        }
 
-    val volumesAndTracks = mutableMapOf<Int, Int>()
-    getAlbumTracks(track.albumId!!).forEach {
-        val tracks = volumesAndTracks[it.volumeNumber] ?: 0
-        volumesAndTracks[it.volumeNumber!!] = tracks + 1
+        track.hasAlbum -> {
+            val positionInAlbum = getTrackPositionInAlbum(track.albumId!!, track.id)
+
+            album = track.albumName
+            albumArtist = track.albumArtist
+            albumType = track.albumType
+            trackNumber = track.indexInAlbum
+            diskNumber = track.volumeNumber
+            totalDisks = positionInAlbum.totalDisks
+            totalTracks = positionInAlbum.totalTracks
+            releaseDate = track.albumReleaseDate
+        }
     }
-    tags.totalDisks(volumesAndTracks.keys.size)
-        .totalTracks(volumesAndTracks[track.volumeNumber])
-
-    return tags.createTags()
-}
+}.createTags()
 ```
 
 В `BaseMurglar` есть базовая реализация этого метода, для кастомизации следует переопределить его.
@@ -401,8 +401,7 @@ override fun getTags(track: SampleTrack): Tags {
 (см. `com.badmanners.murglar.lib.core.model.track.BaseTrack#mediaId` и `com.badmanners.murglar.lib.core.utils.MediaId`):
 
 ```kotlin
-@WorkerThread
-override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = mediaIds
+override suspend fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = mediaIds
     .map { MediaId.getIds(it).first() }
     .loadPaged(1000) {
         val request = postRequest("$API_DOMAIN/track-entries")
@@ -560,6 +559,7 @@ override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = me
     paging = PAGEABLE,
     hasSubdirectories = false,
     isOwn = true,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::getMyTracks
   ),
   Root(
@@ -568,6 +568,7 @@ override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = me
     paging = NON_PAGEABLE,
     hasSubdirectories = true,
     isOwn = false,
+    contentNodeType = PLAYLIST,
     nodeContentSupplier = ::getRecommendations
   )
   ```
@@ -578,7 +579,7 @@ override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = me
     pattern = "searchTracks",
     name = messages::tracksSearch,
     hasSubdirectories = false,
-    contentType = TRACK,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::searchTracks
   )
   ```
@@ -588,6 +589,7 @@ override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = me
     pattern = "*/artist-<artistId>/popularTracks",
     paging = NON_PAGEABLE,
     hasSubdirectories = false,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::getArtistPopularTracks
   )
   ```
@@ -598,6 +600,7 @@ override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = me
     paging = NON_PAGEABLE,
     hasSubdirectories = true,
     type = ARTIST,
+    contentNodeType = NODE,
     relatedPaths = ::getArtistRelatedPaths,
     like = LikeConfig(rootNodePath("myArtists"), ::likeArtist),
     urlPatterns = listOf("*sample.com/artist/<artistId:\\d+>*"),
@@ -609,6 +612,7 @@ override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = me
     paging = NON_PAGEABLE,
     hasSubdirectories = false,
     type = ALBUM,
+    contentNodeType = TRACK,
     relatedPaths = ::getAlbumRelatedPaths,
     like = LikeConfig(rootNodePath("myAlbums"), ::likeAlbum),
     urlPatterns = listOf("*sample.com/album/<albumId:\\d+>*"),
@@ -751,12 +755,13 @@ Directory(
     pattern = "*/artist-<artistId>/albums",
     paging = NON_PAGEABLE,
     hasSubdirectories = true,
+    contentNodeType = ALBUM,
     nodeContentSupplier = ::getArtistAlbums
 )
 
 //...
 
-fun getArtistAlbums(parentPath: Path, page: Int?, params: Map<String, String>): List<Node> =
+suspend fun getArtistAlbums(parentPath: Path, page: Int?, params: Map<String, String>): List<Node> =
     murglar.getArtistAlbums(params["artistId"]!!).convertAlbums(parentPath)
 ```
 
@@ -780,7 +785,7 @@ fun SamplePlaylist.convertSamplePlaylist(parentPath: Path) = convert(::playlistN
 ```
 
 Итого для получения контента нужно реализовать `getXxx` методы и указать их в полях конфигураций `nodeSupplier`,
-`nodeContentSupplier` и `nodeWithContentSupplier`.
+`nodeContentSupplier` и `radioContentSupplier`.
 
 ### Поиск
 
@@ -791,13 +796,13 @@ Search(
     pattern = "searchTracks",
     name = messages::tracksSearch,
     hasSubdirectories = false,
-    contentType = TRACK,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::searchTracks
 )
 
 //...
 
-fun searchTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
+suspend fun searchTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
     murglar.searchTracks(params.getQuery(), page!!).convertSampleTracks(parentPath)
 ```
 
@@ -859,7 +864,7 @@ MappedEntity(
     // ...
 )
 
-fun likeAlbum(node: Node, like: Boolean) {
+suspend fun likeAlbum(node: Node, like: Boolean) {
     val album = node.to<SampleAlbum>()
     if (like)
         murglar.addAlbumToFavorite(album)
@@ -908,7 +913,7 @@ MappedEntity(
 ```kotlin
 override fun canGetNodeFromUrl(url: String): Boolean = url.contains("sample.page.link/")
 
-override fun getNodeFromUrl(url: String): Node {
+override suspend fun getNodeFromUrl(url: String): Node {
     val node = murglar.resolveUrlToNode(url)
     return node.convert(node.nodeType, unmappedPath())
 }
@@ -920,7 +925,7 @@ override fun canGetNodeFromUrl(url: String): Boolean = when {
     else -> super.canGetNodeFromUrl(url)
 }
 
-override fun getNodeFromUrl(url: String): Node {
+override suspend fun getNodeFromUrl(url: String): Node {
     val finalUrl = when {
         url.contains("go.onelink.me/") -> murglar.resolveOneLinkMeUrlToServiceUrl(url)
         else -> url
@@ -947,10 +952,10 @@ Track(
     // ...
 )
 
-fun SampleTrack.handleStartEvent() {
+suspend fun SampleTrack.handleStartEvent() {
     murglar.reportTrackStart(this)
 }
-fun SampleTrack.handleEndEvent(endTimeMs: Int) {
+suspend fun SampleTrack.handleEndEvent(endTimeMs: Int) {
     murglar.reportTrackEnd(this, endTimeMs)
 }
 ```
@@ -977,7 +982,7 @@ fun SampleTrack.handleEndEvent(endTimeMs: Int) {
 Основные моменты создания Android модуля описаны в
 [README основного проекта](https://github.com/badmannersteam/murglar-plugins) - разделы Installation и Usage.
 
-Не забудьте добавить иконку сервиса и указать в AndroidManifest.xml шаблоны URL контента, если ваш плагин должен
+Не забудьте указать в AndroidManifest.xml шаблоны URL контента, если ваш плагин должен
 поддерживать открытие контента по ссылкам.
 
 Android модуль, настроенный Gradle плагином, уже содержит все необходимые Proguard правила для `core` библиотеки,

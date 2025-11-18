@@ -10,9 +10,9 @@ class SampleArtist(
     name: String,
     smallCoverUrl: String?,
     bigCoverUrl: String?,
+    serviceUrl: String,
     val albumsCount: Int,
-    val tracksCount: Int,
-    serviceUrl: String
+    val tracksCount: Int
 ) : BaseArtist(
     id = id,
     name = name,

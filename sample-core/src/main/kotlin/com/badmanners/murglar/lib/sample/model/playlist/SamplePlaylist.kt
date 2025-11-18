@@ -9,12 +9,12 @@ class SamplePlaylist(
     id: String,
     title: String,
     description: String?,
+    tracksCount: Int,
     smallCoverUrl: String?,
     bigCoverUrl: String?,
-    tracksCount: Int,
+    serviceUrl: String,
     val ownerLogin: String,
-    val ownerId: String,
-    serviceUrl: String
+    val ownerId: String
 ) : BasePlaylist(
     id = id,
     title = title,

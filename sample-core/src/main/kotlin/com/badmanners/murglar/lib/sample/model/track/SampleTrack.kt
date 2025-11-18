@@ -1,5 +1,6 @@
 package com.badmanners.murglar.lib.sample.model.track
 
+import com.badmanners.murglar.lib.core.model.album.AlbumType
 import com.badmanners.murglar.lib.core.model.track.BaseTrack
 import com.badmanners.murglar.lib.core.model.track.source.Source
 import com.badmanners.murglar.lib.core.utils.contract.Model
@@ -17,6 +18,7 @@ class SampleTrack(
     albumName: String?,
     albumReleaseDate: LocalDate?,
     val albumArtist: String?,
+    val albumType: AlbumType?,
     val albumAdditionalInfo: String?,
     indexInAlbum: Int?,
     volumeNumber: Int?,
@@ -25,13 +27,13 @@ class SampleTrack(
     explicit: Boolean,
     val lyricsId: String?,
     gain: String?,
-    peak: String?,
+    peak: Double?,
     sources: List<Source>,
-    override val nodeType: String,
     mediaId: String,
     smallCoverUrl: String?,
     bigCoverUrl: String?,
-    serviceUrl: String
+    serviceUrl: String,
+    override val nodeType: String
 ) : BaseTrack(
     id = id,
     title = title,

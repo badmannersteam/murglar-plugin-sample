@@ -148,7 +148,6 @@ Create a class that inherits from `BaseMurglar`, using the previously created tr
 declare and pass to the constructor of `BaseMurglar`:
 
 - plugin identifier
-- icon URL (colored, 512px PNG)
 - `Locale`->`Messages` mapping
 - all `Middleware`s
 
@@ -163,12 +162,9 @@ class SampleMurglar(
     network: NetworkMiddleware,
     notifications: NotificationMiddleware,
     logger: LoggerMiddleware
-) : BaseMurglar<SampleTrack, SampleMessages>(id, ICON_URL, MESSAGES, preferences, network, notifications, logger) {
+) : BaseMurglar<SampleTrack, SampleMessages>(id, MESSAGES, preferences, network, notifications, logger) {
 
     companion object {
-        private const val ICON_URL =
-            "https://play-lh.googleusercontent.com/aFWiT2lTa9CYBpyPjfgfNHd0r5puwKRGj2rHpdPTNrz2N9LXgN_MbLjePd1OTc0E8Rl1"
-
         private val MESSAGES = mapOf(
             DEFAULT to SampleDefaultMessages,
             RUSSIAN to SampleRussianMessages
@@ -241,8 +237,7 @@ and an `Murglar` instance is created.
 In this method you can perform various actions if needed - for example, update session/tokens/keys.
 
 ```kotlin
-@WorkerThread
-override fun onCreate() {
+override suspend fun onCreate() {
     if (!loginResolver.isLogged)
         return
 
@@ -262,8 +257,7 @@ The `resolveSourceForUrl` method performs this by getting as arguments a track o
 which should be returned with the already prepared content URL:
 
 ```kotlin
-@WorkerThread
-override fun resolveSourceForUrl(track: SampleTrack, source: Source): Source {
+override suspend fun resolveSourceForUrl(track: SampleTrack, source: Source): Source {
     val request = getRequest("${API_V2_DOMAIN}/track/${track.id}/download").build()
     val result = network.execute(request, ResponseConverters.asJsonObject()).result
 
@@ -311,8 +305,7 @@ If it is not reliably known whether the lyrics exist, but it possible - it is be
 To get the lyrics itself, the `getLyrics` method will be called to request the lyrics from the service:
 
 ```kotlin
-@WorkerThread
-override fun getLyrics(track: SampleTrack): Lyrics {
+override suspend fun getLyrics(track: SampleTrack): Lyrics {
     val request = trackRequest(track.id, track.albumId)
     val response = network.execute(request, ResponseConverters.asJsonObject())
 
@@ -356,38 +349,45 @@ It is the responsibility of the host application to implement the tagging itself
 containers. The plugin is only required to populate this object with data in the `getTags` method:
 
 ```kotlin
-@WorkerThread
-override fun getTags(track: SampleTrack): Tags {
-    val tags = Tags.Builder()
-        .title(track.title)
-        .subtitle(track.subtitle)
-        .artists(track.artistNames)
-        .genre(track.genre)
-        .explicit(track.explicit)
-        .gain(track.gain)
-        .peak(track.peak)
-        .url(track.serviceUrl)
-        .mediaId(track.mediaId)
+override suspend fun getTags(track: SampleTrack, parent: Node?) = Tags.Builder().apply {
+    title = track.title
+    subtitle = track.subtitle
+    artists = track.artistNames
+    genre = track.genre
+    explicit = track.explicit
+    gain = track.gain
+    peak = track.peak
+    url = track.serviceUrl
+    mediaId = track.mediaId
 
-    if (!track.hasAlbum)
-        return tags.createTags()
+    when {
+        parent is SampleAlbum -> {
+            val positionInAlbum = getTrackPositionInAlbum(parent.id, track.id)
 
-    tags.album(track.albumName)
-        .albumArtist(track.albumArtist)
-        .trackNumber(track.indexInAlbum)
-        .diskNumber(track.volumeNumber)
-        .releaseDate(track.albumReleaseDate)
+            album = parent.title
+            albumArtist = parent.artistName
+            albumType = parent.type
+            trackNumber = positionInAlbum.trackNumberInVolume
+            diskNumber = positionInAlbum.trackVolumeNumber
+            totalDisks = positionInAlbum.totalDisks
+            totalTracks = positionInAlbum.totalTracks
+            releaseDate = parent.releaseDate
+        }
 
-    val volumesAndTracks = mutableMapOf<Int, Int>()
-    getAlbumTracks(track.albumId!!).forEach {
-        val tracks = volumesAndTracks[it.volumeNumber] ?: 0
-        volumesAndTracks[it.volumeNumber!!] = tracks + 1
+        track.hasAlbum -> {
+            val positionInAlbum = getTrackPositionInAlbum(track.albumId!!, track.id)
+
+            album = track.albumName
+            albumArtist = track.albumArtist
+            albumType = track.albumType
+            trackNumber = track.indexInAlbum
+            diskNumber = track.volumeNumber
+            totalDisks = positionInAlbum.totalDisks
+            totalTracks = positionInAlbum.totalTracks
+            releaseDate = track.albumReleaseDate
+        }
     }
-    tags.totalDisks(volumesAndTracks.keys.size)
-        .totalTracks(volumesAndTracks[track.volumeNumber])
-
-    return tags.createTags()
-}
+}.createTags()
 ```
 
 There is a basic implementation of this method in `BaseMurglar`, you can override it for customization.
@@ -402,8 +402,7 @@ For fast metadata retrieving there is a `getTracksByMediaIds` method that takes 
 and `com.badmanners.murglar.lib.core.utils.MediaId`):
 
 ```kotlin
-@WorkerThread
-override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = mediaIds
+override suspend fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = mediaIds
     .map { MediaId.getIds(it).first() }
     .loadPaged(1000) {
         val request = postRequest("$API_DOMAIN/track-entries")
@@ -563,6 +562,7 @@ that describing the content of the service - see `com.badmanners.murglar.lib.cor
     paging = PAGEABLE,
     hasSubdirectories = false,
     isOwn = true,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::getMyTracks
   ),
   Root(
@@ -571,6 +571,7 @@ that describing the content of the service - see `com.badmanners.murglar.lib.cor
     paging = NON_PAGEABLE,
     hasSubdirectories = true,
     isOwn = false,
+    contentNodeType = PLAYLIST,
     nodeContentSupplier = ::getRecommendations
   )
   ```
@@ -581,7 +582,7 @@ that describing the content of the service - see `com.badmanners.murglar.lib.cor
     pattern = "searchTracks",
     name = messages::tracksSearch,
     hasSubdirectories = false,
-    contentType = TRACK,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::searchTracks
   )
   ```
@@ -591,6 +592,7 @@ that describing the content of the service - see `com.badmanners.murglar.lib.cor
     pattern = "*/artist-<artistId>/popularTracks",
     paging = NON_PAGEABLE,
     hasSubdirectories = false,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::getArtistPopularTracks
   )
   ```
@@ -601,6 +603,7 @@ that describing the content of the service - see `com.badmanners.murglar.lib.cor
     paging = NON_PAGEABLE,
     hasSubdirectories = true,
     type = ARTIST,
+    contentNodeType = NODE,
     relatedPaths = ::getArtistRelatedPaths,
     like = LikeConfig(rootNodePath("myArtists"), ::likeArtist),
     urlPatterns = listOf("*sample.com/artist/<artistId:\\d+>*"),
@@ -612,6 +615,7 @@ that describing the content of the service - see `com.badmanners.murglar.lib.cor
     paging = NON_PAGEABLE,
     hasSubdirectories = false,
     type = ALBUM,
+    contentNodeType = TRACK,
     relatedPaths = ::getAlbumRelatedPaths,
     like = LikeConfig(rootNodePath("myAlbums"), ::likeAlbum),
     urlPatterns = listOf("*sample.com/album/<albumId:\\d+>*"),
@@ -756,12 +760,13 @@ Directory(
     pattern = "*/artist-<artistId>/albums",
     paging = NON_PAGEABLE,
     hasSubdirectories = true,
+    contentNodeType = ALBUM,
     nodeContentSupplier = ::getArtistAlbums
 )
 
 //...
 
-fun getArtistAlbums(parentPath: Path, page: Int?, params: Map<String, String>): List<Node> =
+suspend fun getArtistAlbums(parentPath: Path, page: Int?, params: Map<String, String>): List<Node> =
     murglar.getArtistAlbums(params["artistId"]!!).convertAlbums(parentPath)
 ```
 
@@ -786,7 +791,7 @@ fun SamplePlaylist.convertSamplePlaylist(parentPath: Path) = convert(::playlistN
 ```
 
 So for querying content, we need to implement `getXxx` methods and specify them in the `nodeSupplier`,
-`nodeContentSupplier` or `nodeWithContentSupplier` configuration fields.
+`nodeContentSupplier` or `radioContentSupplier` configuration fields.
 
 ### Search
 
@@ -797,13 +802,13 @@ Search(
     pattern = "searchTracks",
     name = messages::tracksSearch,
     hasSubdirectories = false,
-    contentType = TRACK,
+    contentNodeType = TRACK,
     nodeContentSupplier = ::searchTracks
 )
 
 //...
 
-fun searchTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
+suspend fun searchTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
     murglar.searchTracks(params.getQuery(), page!!).convertSampleTracks(parentPath)
 ```
 
@@ -865,7 +870,7 @@ MappedEntity(
     // ...
 )
 
-fun likeAlbum(node: Node, like: Boolean) {
+suspend fun likeAlbum(node: Node, like: Boolean) {
     val album = node.to<SampleAlbum>()
     if (like)
         murglar.addAlbumToFavorite(album)
@@ -913,7 +918,7 @@ or combine both methods and use templates for formats with known type, and custo
 ```kotlin
 override fun canGetNodeFromUrl(url: String): Boolean = url.contains("sample.page.link/")
 
-override fun getNodeFromUrl(url: String): Node {
+override suspend fun getNodeFromUrl(url: String): Node {
     val node = murglar.resolveUrlToNode(url)
     return node.convert(node.nodeType, unmappedPath())
 }
@@ -925,7 +930,7 @@ override fun canGetNodeFromUrl(url: String): Boolean = when {
     else -> super.canGetNodeFromUrl(url)
 }
 
-override fun getNodeFromUrl(url: String): Node {
+override suspend fun getNodeFromUrl(url: String): Node {
     val finalUrl = when {
         url.contains("go.onelink.me/") -> murglar.resolveOneLinkMeUrlToServiceUrl(url)
         else -> url
@@ -952,10 +957,10 @@ Track(
     // ...
 )
 
-fun SampleTrack.handleStartEvent() {
+suspend fun SampleTrack.handleStartEvent() {
     murglar.reportTrackStart(this)
 }
-fun SampleTrack.handleEndEvent(endTimeMs: Int) {
+suspend fun SampleTrack.handleEndEvent(endTimeMs: Int) {
     murglar.reportTrackEnd(this, endTimeMs)
 }
 ```
@@ -982,7 +987,7 @@ declaring the module as a `testImplementation` dependency in `<plugin_name>-core
 The main points of Android module creation are described in
 [README of the main project](https://github.com/badmannersteam/murglar-plugins) - sections Installation and Usage.
 
-Don't forget to add a service icon and specify content URL templates in the AndroidManifest.xml if your plugin should
+Don't forget to specify content URL templates in the AndroidManifest.xml if your plugin should
 support opening content by URLs.
 
 The Android module configured by the Gradle plugin already contains all the necessary Proguard rules

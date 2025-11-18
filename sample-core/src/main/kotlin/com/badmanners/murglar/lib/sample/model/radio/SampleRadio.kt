@@ -13,8 +13,8 @@ class SampleRadio private constructor(
     val queue: String
 ) : BaseRadio(
     id = "$type:$tag",
-    name = name,
-    summary = null,
+    title = name,
+    description = null,
     smallCoverUrl = coverUrl
 ) {
 

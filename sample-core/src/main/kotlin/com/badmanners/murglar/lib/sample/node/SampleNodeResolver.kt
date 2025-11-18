@@ -18,8 +18,9 @@ import com.badmanners.murglar.lib.core.model.node.NodeType.PODCAST
 import com.badmanners.murglar.lib.core.model.node.NodeType.PODCAST_EPISODE
 import com.badmanners.murglar.lib.core.model.node.NodeType.RADIO
 import com.badmanners.murglar.lib.core.model.node.NodeType.TRACK
-import com.badmanners.murglar.lib.core.model.node.NodeWithContent
 import com.badmanners.murglar.lib.core.model.node.Path
+import com.badmanners.murglar.lib.core.model.node.RadioNodeUpdate
+import com.badmanners.murglar.lib.core.model.radio.RadioSettingsUpdate
 import com.badmanners.murglar.lib.core.node.BaseNodeResolver
 import com.badmanners.murglar.lib.core.node.Directory
 import com.badmanners.murglar.lib.core.node.EventConfig
@@ -52,6 +53,7 @@ class SampleNodeResolver(
             paging = PAGEABLE,
             hasSubdirectories = false,
             isOwn = true,
+            contentNodeType = TRACK,
             nodeContentSupplier = ::getMyTracks
         ),
         Root(
@@ -60,6 +62,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             isOwn = true,
+            contentNodeType = ALBUM,
             nodeContentSupplier = ::getMyAlbums
         ),
         Root(
@@ -68,6 +71,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             isOwn = true,
+            contentNodeType = ARTIST,
             nodeContentSupplier = ::getMyArtists
         ),
         Root(
@@ -76,6 +80,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             isOwn = true,
+            contentNodeType = PLAYLIST,
             nodeContentSupplier = ::getMyPlaylists
         ),
         Root(
@@ -84,6 +89,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             isOwn = true,
+            contentNodeType = PODCAST,
             nodeContentSupplier = ::getMyPodcasts
         ),
         Root(
@@ -92,6 +98,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             isOwn = true,
+            contentNodeType = AUDIOBOOK,
             nodeContentSupplier = ::getMyAudiobooks
         ),
         Root(
@@ -100,6 +107,7 @@ class SampleNodeResolver(
             paging = ENDLESSLY_PAGEABLE,
             hasSubdirectories = false,
             isOwn = true,
+            contentNodeType = TRACK,
             nodeContentSupplier = ::getMyHistory
         ),
         Root(
@@ -108,6 +116,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             isOwn = false,
+            contentNodeType = PLAYLIST,
             nodeContentSupplier = ::getRecommendations
         ),
         Root(
@@ -116,6 +125,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             isOwn = false,
+            contentNodeType = NODE,
             nodeContentSupplier = ::getRadioTypes
         ),
 
@@ -123,42 +133,42 @@ class SampleNodeResolver(
             pattern = "searchTracks",
             name = messages::tracksSearch,
             hasSubdirectories = false,
-            contentType = TRACK,
+            contentNodeType = TRACK,
             nodeContentSupplier = ::searchTracks
         ),
         Search(
             pattern = "searchAlbums",
             name = messages::albumsSearch,
             hasSubdirectories = true,
-            contentType = ALBUM,
+            contentNodeType = ALBUM,
             nodeContentSupplier = ::searchAlbums
         ),
         Search(
             pattern = "searchArtists",
             name = messages::artistsSearch,
             hasSubdirectories = true,
-            contentType = ARTIST,
+            contentNodeType = ARTIST,
             nodeContentSupplier = ::searchArtists
         ),
         Search(
             pattern = "searchPlaylists",
             name = messages::playlistsSearch,
             hasSubdirectories = true,
-            contentType = PLAYLIST,
+            contentNodeType = PLAYLIST,
             nodeContentSupplier = ::searchPlaylists
         ),
         Search(
             pattern = "searchPodcasts",
             name = messages::podcastsSearch,
             hasSubdirectories = true,
-            contentType = PODCAST,
+            contentNodeType = PODCAST,
             nodeContentSupplier = ::searchPodcasts
         ),
         Search(
             pattern = "searchAudiobooks",
             name = messages::audiobooksSearch,
             hasSubdirectories = true,
-            contentType = AUDIOBOOK,
+            contentNodeType = AUDIOBOOK,
             nodeContentSupplier = ::searchAudiobooks
         ),
 
@@ -196,6 +206,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = false,
             type = ALBUM,
+            contentNodeType = TRACK,
             relatedPaths = ::getAlbumRelatedPaths,
             like = LikeConfig(rootNodePath("myAlbums"), ::likeAlbum),
             urlPatterns = listOf("*sample.com/album/<albumId:\\d+>*"),
@@ -207,30 +218,35 @@ class SampleNodeResolver(
             pattern = "*/artist-<artistId>/popularTracks",
             paging = NON_PAGEABLE,
             hasSubdirectories = false,
+            contentNodeType = TRACK,
             nodeContentSupplier = ::getArtistPopularTracks
         ),
         Directory(
             pattern = "*/artist-<artistId>/albums",
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
+            contentNodeType = ALBUM,
             nodeContentSupplier = ::getArtistAlbums
         ),
         Directory(
             pattern = "*/artist-<artistId>/compilations",
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
+            contentNodeType = ALBUM,
             nodeContentSupplier = ::getArtistCompilations
         ),
         Directory(
             pattern = "*/artist-<artistId>/playlists",
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
+            contentNodeType = PLAYLIST,
             nodeContentSupplier = ::getArtistPlaylists
         ),
         Directory(
             pattern = "*/artist-<artistId>/similarArtists",
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
+            contentNodeType = ARTIST,
             nodeSupplier = ::getArtistSimilarArtistsSubdirectory,
             nodeContentSupplier = ::getArtistSimilarArtists
         ),
@@ -239,6 +255,7 @@ class SampleNodeResolver(
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
             type = ARTIST,
+            contentNodeType = NODE,
             relatedPaths = ::getArtistRelatedPaths,
             like = LikeConfig(rootNodePath("myArtists"), ::likeArtist),
             urlPatterns = listOf("*sample.com/artist/<artistId:\\d+>*"),
@@ -251,6 +268,7 @@ class SampleNodeResolver(
             paging = PAGEABLE,
             hasSubdirectories = false,
             type = PLAYLIST,
+            contentNodeType = TRACK,
             relatedPaths = ::getPlaylistRelatedPaths,
             like = LikeConfig(rootNodePath("myPlaylists"), ::likePlaylist),
             urlPatterns = listOf("*sample.com/users/<ownerId>/playlists/<playlistId:\\d+>*"),
@@ -262,6 +280,7 @@ class SampleNodeResolver(
             pattern = "*/type-<type>",
             paging = NON_PAGEABLE,
             hasSubdirectories = true,
+            contentNodeType = RADIO,
             nodeContentSupplier = ::getRadioTypeRadios
         ),
         MappedEntity(
@@ -269,8 +288,9 @@ class SampleNodeResolver(
             paging = ENDLESSLY_PAGEABLE,
             hasSubdirectories = false,
             type = RADIO,
+            contentNodeType = TRACK,
             nodeSupplier = ::getRadio,
-            nodeWithContentSupplier = ::getRadioTracks
+            radioContentSupplier = ::getRadioTracks
         ),
 
         UnmappedEntity(
@@ -284,74 +304,74 @@ class SampleNodeResolver(
     )
 
     @Suppress("UNCHECKED_CAST")
-    override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> =
+    override suspend fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> =
         murglar.getTracksByMediaIds(mediaIds).convertSampleTracks(unmappedPath()) as List<SampleTrack>
 
 
-    private fun getMyTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getMyTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getMyTracks(page!!).convertSampleTracks(parentPath)
 
-    private fun getMyAlbums(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getMyAlbums(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getMyAlbums().convertAlbums(parentPath)
 
-    private fun getMyArtists(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getMyArtists(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getMyArtists().convertArtists(parentPath)
 
-    private fun getMyPlaylists(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getMyPlaylists(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getMyPlaylists().convertSamplePlaylists(parentPath)
 
-    private fun getMyPodcasts(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getMyPodcasts(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getMyPodcasts().convertAlbums(parentPath)
 
-    private fun getMyAudiobooks(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getMyAudiobooks(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getMyAudiobooks().convertAlbums(parentPath)
 
-    private fun getMyHistory(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getMyHistory(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getMyHistory(page!!).convertSampleTracks(parentPath)
 
-    private fun getRecommendations(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getRecommendations(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getRecommendationsPlaylists().convertSamplePlaylists(parentPath)
 
-    private fun getRadioTypeRadios(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getRadioTypeRadios(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getRadioLibrary().getTypeRadios(params["type"]!!).convert(::radioNodePath, parentPath)
 
-    private fun getRadioTypes(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getRadioTypes(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getRadioLibrary().types.convert(::radioTypeNodePath, parentPath)
 
-    private fun searchTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun searchTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.searchTracks(params.getQuery(), page!!).convertSampleTracks(parentPath)
 
-    private fun searchAlbums(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun searchAlbums(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.searchAlbums(params.getQuery(), page!!).convertAlbums(parentPath)
 
-    private fun searchArtists(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun searchArtists(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.searchArtists(params.getQuery(), page!!).convertArtists(parentPath)
 
-    private fun searchPlaylists(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun searchPlaylists(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.searchPlaylists(params.getQuery(), page!!).convertSamplePlaylists(parentPath)
 
-    private fun searchPodcasts(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun searchPodcasts(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.searchPodcasts(params.getQuery(), page!!).convertAlbums(parentPath)
 
-    private fun searchAudiobooks(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun searchAudiobooks(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.searchAudiobooks(params.getQuery(), page!!).convertAlbums(parentPath)
 
-    private fun getAlbumTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getAlbumTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getAlbumTracks(params["albumId"]!!).convertSampleTracks(parentPath)
 
-    private fun getArtistPopularTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getArtistPopularTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getArtistPopularTracks(params["artistId"]!!).convertSampleTracks(parentPath)
 
-    private fun getArtistAlbums(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getArtistAlbums(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getArtistAlbums(params["artistId"]!!).convertAlbums(parentPath)
 
-    private fun getArtistCompilations(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getArtistCompilations(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getArtistCompilations(params["artistId"]!!).convertAlbums(parentPath)
 
-    private fun getArtistPlaylists(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getArtistPlaylists(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getArtistPlaylists(params["artistId"]!!).convertSamplePlaylists(parentPath)
 
-    private fun getArtistSimilarArtists(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getArtistSimilarArtists(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getArtistSimilarArtists(params["artistId"]!!).convertArtists(parentPath)
 
     private fun getArtistSubdirectories(parentPath: Path, page: Int?, params: Map<String, String>) = listOf(
@@ -361,34 +381,38 @@ class SampleNodeResolver(
         subdirectoryNode("playlists", messages.playlists, parentPath)
     )
 
-    private fun getPlaylistTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
+    private suspend fun getPlaylistTracks(parentPath: Path, page: Int?, params: Map<String, String>) =
         murglar.getPlaylistTracks(params["ownerId"]!!, params["playlistId"]!!, page!!).convertSampleTracks(parentPath)
 
-    private fun getRadioTracks(node: Node, params: Map<String, String>): NodeWithContent {
+    private suspend fun getRadioTracks(
+        node: Node,
+        settingsUpdate: RadioSettingsUpdate?,
+        params: Map<String, String>
+    ): RadioNodeUpdate {
         val radio = node.to<SampleRadio>()
-        val radioUpdate = murglar.getRadioNextTracks(radio)
-        val updatedRadio = radioUpdate.updatedRadio.withNodeAttributes(node)
+        val radioUpdate = murglar.getRadioNextTracks(radio, settingsUpdate)
+        val updatedRadio = radioUpdate.updatedRadio.apply { withNodeAttributes(node) }
         val tracks = radioUpdate.nextTracks.convertSampleTracks(node.nodePath)
-        return NodeWithContent(updatedRadio, tracks)
+        return RadioNodeUpdate(updatedRadio, tracks)
     }
 
-    private fun getArtist(parentPath: Path, params: Map<String, String>) =
+    private suspend fun getArtist(parentPath: Path, params: Map<String, String>) =
         murglar.getArtist(params["artistId"]!!).convertArtist(parentPath)
 
     private fun getArtistSimilarArtistsSubdirectory(parentPath: Path, params: Map<String, String>) = subdirectoryNode(
         "similarArtists", messages.similarArtists, parentPath.child("artist-${params["artistId"]}")
     )
 
-    private fun getAlbum(parentPath: Path, params: Map<String, String>) =
+    private suspend fun getAlbum(parentPath: Path, params: Map<String, String>) =
         murglar.getAlbum(params["albumId"]!!).convertAlbum(parentPath)
 
-    private fun getPlaylist(parentPath: Path, params: Map<String, String>) =
+    private suspend fun getPlaylist(parentPath: Path, params: Map<String, String>) =
         murglar.getPlaylist(params["ownerId"]!!, params["playlistId"]!!).convertSamplePlaylist(parentPath)
 
-    private fun getTrack(parentPath: Path, params: Map<String, String>) =
+    private suspend fun getTrack(parentPath: Path, params: Map<String, String>) =
         murglar.getTrack(params["trackId"]!!, params["albumId"]).convertSampleTrack(parentPath)
 
-    private fun getRadio(parentPath: Path, params: Map<String, String>): Node {
+    private suspend fun getRadio(parentPath: Path, params: Map<String, String>): Node {
         val radioType = params["radioType"]!!
         val radioTag = params["radioTag"]!!
         val radio = when (radioType) {
@@ -465,7 +489,7 @@ class SampleNodeResolver(
     }
 
 
-    private fun likeTrack(node: Node, like: Boolean) {
+    private suspend fun likeTrack(node: Node, like: Boolean) {
         val track = node.to<SampleTrack>()
         if (like)
             murglar.addTrackToFavorite(track)
@@ -473,7 +497,7 @@ class SampleNodeResolver(
             murglar.removeTrackFromFavorite(track)
     }
 
-    private fun likeAlbum(node: Node, like: Boolean) {
+    private suspend fun likeAlbum(node: Node, like: Boolean) {
         val album = node.to<SampleAlbum>()
         if (like)
             murglar.addAlbumToFavorite(album)
@@ -481,7 +505,7 @@ class SampleNodeResolver(
             murglar.removeAlbumFromFavorite(album)
     }
 
-    private fun likeArtist(node: Node, like: Boolean) {
+    private suspend fun likeArtist(node: Node, like: Boolean) {
         val artist = node.to<SampleArtist>()
         if (like)
             murglar.addArtistToFavorite(artist)
@@ -489,7 +513,7 @@ class SampleNodeResolver(
             murglar.removeArtistFromFavorite(artist)
     }
 
-    private fun likePlaylist(node: Node, like: Boolean) {
+    private suspend fun likePlaylist(node: Node, like: Boolean) {
         val playlist = node.to<SamplePlaylist>()
         if (like)
             murglar.addPlaylistToFavorite(playlist)
@@ -498,13 +522,13 @@ class SampleNodeResolver(
     }
 
 
-    private fun SampleTrack.handleStartEvent() {
+    private suspend fun SampleTrack.handleStartEvent() {
         if (isRadioRelated())
             murglar.reportRadioTrackStart(radioFromTrack(), this)
         murglar.reportTrackStart(this)
     }
 
-    private fun SampleTrack.handleEndEvent(endTimeMs: Int) {
+    private suspend fun SampleTrack.handleEndEvent(endTimeMs: Int) {
         murglar.reportTrackEnd(this, endTimeMs)
         if (isRadioRelated())
             murglar.reportRadioTrackEnd(radioFromTrack(), this, endTimeMs)

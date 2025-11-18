@@ -27,7 +27,7 @@ class SampleDecryptor(private val logger: LoggerMiddleware) : Decryptor<SampleTr
 
     override val decryptionChunkSize = CHUNK_SIZE
 
-    override fun decrypt(content: ByteArray, offset: Int, length: Int, track: SampleTrack, source: Source): ByteArray {
+    override suspend fun decrypt(content: ByteArray, offset: Int, length: Int, track: SampleTrack, source: Source): ByteArray {
         val cipher = buildCipher(track.id)
         val result = ByteArrayOutputStream(length)
         try {

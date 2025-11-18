@@ -1,7 +1,8 @@
 package com.badmanners.murglar.client.cli
 
 import com.badmanners.murglar.client.cli.logger.StdLogger
-import com.badmanners.murglar.client.cli.network.ApacheHttpClientNetworkMiddleware
+import com.badmanners.murglar.client.cli.network.JsonPersistedCookiesStorage
+import com.badmanners.murglar.client.cli.network.KtorNetworkMiddleware
 import com.badmanners.murglar.client.cli.notification.StdNotificationMiddleware
 import com.badmanners.murglar.client.cli.preference.JsonPreferenceMiddleware
 import com.badmanners.murglar.lib.core.model.node.Node.Companion.toTrack
@@ -16,18 +17,18 @@ import com.badmanners.murglar.lib.sample.model.track.SampleTrack
 import java.io.File
 
 
-fun main() {
+suspend fun main() {
     MurglarCli.start()
 }
 
 object MurglarCli {
 
-    private val network = ApacheHttpClientNetworkMiddleware()
-    private val notifications = StdNotificationMiddleware()
-    private val preferences = JsonPreferenceMiddleware(File("preferences.json"))
     private val logger = StdLogger()
+    private val notifications = StdNotificationMiddleware()
+    private val preferences = JsonPreferenceMiddleware(File("preferences.json"), logger)
+    private val network = KtorNetworkMiddleware(JsonPersistedCookiesStorage(File("cookies.json"), logger))
 
-    fun start() {
+    suspend fun start() {
         val murglar = SampleMurglar("sample", preferences, network, notifications, logger)
 
         val token = "***token***"
@@ -57,8 +58,8 @@ object MurglarCli {
         // call what you want from murglar/nodeResolver
     }
 
-    private fun <T : BaseTrack> T.download(murglar: Murglar<T>, source: Source = sources.first()) {
-        val tags = murglar.getTags(this)
+    private suspend fun <T : BaseTrack> T.download(murglar: Murglar<T>, source: Source = sources.first()) {
+        val tags = murglar.getTags(this, null)
 
         val lyrics = when {
             murglar.hasLyrics(this) -> murglar.getLyrics(this).plain

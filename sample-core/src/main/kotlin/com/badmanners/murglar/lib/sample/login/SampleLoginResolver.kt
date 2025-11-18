@@ -1,6 +1,9 @@
 package com.badmanners.murglar.lib.sample.login
 
 import com.badmanners.murglar.lib.core.localization.MessageException
+import com.badmanners.murglar.lib.core.localization.Messages.Companion.loginWith
+import com.badmanners.murglar.lib.core.localization.Messages.Companion.sessionUpdateFailedWithServiceName
+import com.badmanners.murglar.lib.core.localization.Messages.Companion.youAreNotLoggedInWithServiceName
 import com.badmanners.murglar.lib.core.login.CaptchaRequiredStep
 import com.badmanners.murglar.lib.core.login.CredentialLoginStep
 import com.badmanners.murglar.lib.core.login.CredentialsLoginVariant
@@ -16,7 +19,6 @@ import com.badmanners.murglar.lib.core.notification.NotificationMiddleware
 import com.badmanners.murglar.lib.core.preference.PreferenceMiddleware
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.setHttpOnlySafely
-import com.badmanners.murglar.lib.core.utils.contract.WorkerThread
 import com.badmanners.murglar.lib.core.utils.getJsonObject
 import com.badmanners.murglar.lib.core.utils.getString
 import com.badmanners.murglar.lib.core.utils.getStringOpt
@@ -90,8 +92,7 @@ class SampleLoginResolver(
         )
     )
 
-    @WorkerThread
-    override fun webLogin(loginVariantId: String, webViewProvider: WebViewProvider): Boolean {
+    override suspend fun webLogin(loginVariantId: String, webViewProvider: WebViewProvider): Boolean {
         logout()
 
         val startUrl = when (loginVariantId) {
@@ -102,8 +103,7 @@ class SampleLoginResolver(
 
         val success = webViewProvider.startWebView(
             enableJS = true,
-            userAgent = MurglarLibUtils.CHROME_USER_AGENT,
-            helpText = messages.loginHelpText,
+            userAgent = MurglarLibUtils.CHROME_DESKTOP_USER_AGENT,
             startUrl = startUrl,
             domainsForCookiesSync = listOf("https://sample.com/"),
             resolver = object : UrlLoadPolicyResolver {
@@ -159,8 +159,7 @@ class SampleLoginResolver(
         )
     )
 
-    @WorkerThread
-    override fun credentialsLogin(loginVariantId: String, args: Map<String, String>): CredentialLoginStep {
+    override suspend fun credentialsLogin(loginVariantId: String, args: Map<String, String>): CredentialLoginStep {
         logout()
         return when (loginVariantId) {
             TOKEN_LOGIN_VARIANT -> tokenLogin(args)
@@ -170,7 +169,7 @@ class SampleLoginResolver(
         }
     }
 
-    private fun tokenLogin(args: Map<String, String>): CredentialLoginStep {
+    private suspend fun tokenLogin(args: Map<String, String>): CredentialLoginStep {
         val token = args[OAUTH_TOKEN_CREDENTIAL]
         check(token != null && token.matches("\\d-\\d+-\\d+-\\w+".toRegex())) {
             messages.illegalOauthTokenFormat
@@ -187,7 +186,7 @@ class SampleLoginResolver(
         return SuccessfulLogin
     }
 
-    private fun emailLogin(args: Map<String, String>): CredentialLoginStep {
+    private suspend fun emailLogin(args: Map<String, String>): CredentialLoginStep {
         val email = args[EMAIL_CREDENTIAL]
         val password = args[PASSWORD_CREDENTIAL]
 
@@ -246,7 +245,7 @@ class SampleLoginResolver(
         }
     }
 
-    private fun cookieLogin(args: Map<String, String>): CredentialLoginStep {
+    private suspend fun cookieLogin(args: Map<String, String>): CredentialLoginStep {
         val cookieValue = args[COOKIE_CREDENTIAL]
         check(cookieValue != null && cookieValue.length == 192 && StringUtils.isAlphanumeric(cookieValue)) {
             messages.illegalCookieFormat
@@ -288,7 +287,7 @@ class SampleLoginResolver(
         preferences.remove(USERNAME_PREFERENCE)
     }
 
-    fun updateUser() = murglar.loadUsername()
+    suspend fun updateUser() = murglar.loadUsername()
         ?.let { preferences.setString(USERNAME_PREFERENCE, it) }
         ?: throw MessageException(messages.sessionUpdateFailedWithServiceName)
 

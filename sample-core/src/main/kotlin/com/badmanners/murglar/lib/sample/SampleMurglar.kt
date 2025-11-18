@@ -4,10 +4,15 @@ import com.badmanners.murglar.lib.core.localization.DefaultMessages.Companion.DE
 import com.badmanners.murglar.lib.core.localization.MessageException
 import com.badmanners.murglar.lib.core.localization.RussianMessages.Companion.RUSSIAN
 import com.badmanners.murglar.lib.core.log.LoggerMiddleware
+import com.badmanners.murglar.lib.core.model.album.AlbumType
+import com.badmanners.murglar.lib.core.model.node.Node
 import com.badmanners.murglar.lib.core.model.node.NodeType
+import com.badmanners.murglar.lib.core.model.radio.RadioSettingsUpdate
 import com.badmanners.murglar.lib.core.model.tag.Lyrics
 import com.badmanners.murglar.lib.core.model.tag.Lyrics.SyncedLyrics
 import com.badmanners.murglar.lib.core.model.tag.Tags
+import com.badmanners.murglar.lib.core.model.tag.r128GainToTagsGain
+import com.badmanners.murglar.lib.core.model.tag.r128PeakToTagsPeak
 import com.badmanners.murglar.lib.core.model.track.source.Bitrate
 import com.badmanners.murglar.lib.core.model.track.source.Container
 import com.badmanners.murglar.lib.core.model.track.source.Extension
@@ -28,9 +33,9 @@ import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.loadPaged
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.mask
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.normalize
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.prepareEntriesString
-import com.badmanners.murglar.lib.core.utils.contract.WorkerThread
 import com.badmanners.murglar.lib.core.utils.getBoolean
 import com.badmanners.murglar.lib.core.utils.getBooleanOpt
+import com.badmanners.murglar.lib.core.utils.getDouble
 import com.badmanners.murglar.lib.core.utils.getInt
 import com.badmanners.murglar.lib.core.utils.getIntOpt
 import com.badmanners.murglar.lib.core.utils.getJsonArray
@@ -70,7 +75,7 @@ class SampleMurglar(
     notifications: NotificationMiddleware,
     logger: LoggerMiddleware
 ) : BaseMurglar<SampleTrack, SampleMessages>(
-    id, ICON_URL, MESSAGES, preferences, network, notifications, logger, SampleDecryptor(logger)
+    id, MESSAGES, preferences, network, notifications, logger, SampleDecryptor(logger)
 ) {
 
     companion object {
@@ -78,9 +83,6 @@ class SampleMurglar(
          * Must be used only for [MediaId.build], don't pass it to the [BaseMurglar] constructor directly!
          */
         const val SERVICE_ID = "sample"
-
-        private const val ICON_URL =
-            "https://play-lh.googleusercontent.com/aFWiT2lTa9CYBpyPjfgfNHd0r5puwKRGj2rHpdPTNrz2N9LXgN_MbLjePd1OTc0E8Rl1"
 
         private val MESSAGES = mapOf(
             DEFAULT to SampleDefaultMessages,
@@ -124,8 +126,7 @@ class SampleMurglar(
         Extension.MP3 to Bitrate.B_192
     )
 
-    @WorkerThread
-    override fun onCreate() {
+    override suspend fun onCreate() {
         if (!loginResolver.isLogged)
             return
 
@@ -136,8 +137,7 @@ class SampleMurglar(
         }
     }
 
-    @WorkerThread
-    override fun resolveSourceForUrl(track: SampleTrack, source: Source): Source {
+    override suspend fun resolveSourceForUrl(track: SampleTrack, source: Source): Source {
         val request = getRequest("${API_V2_DOMAIN}/track/${track.id}/download").build()
         val result = network.execute(request, ResponseConverters.asJsonObject()).result
 
@@ -163,8 +163,7 @@ class SampleMurglar(
 
     override fun hasLyrics(track: SampleTrack) = track.hasLyrics
 
-    @WorkerThread
-    override fun getLyrics(track: SampleTrack): Lyrics {
+    override suspend fun getLyrics(track: SampleTrack): Lyrics {
         val request = trackRequest(track.id, track.albumId)
         val response = network.execute(request, ResponseConverters.asJsonObject())
 
@@ -182,8 +181,8 @@ class SampleMurglar(
 
                 val lines = lyrics.split('\n').map {
                     val startMillis = it.substring(1, 3).toLong() * 60000 +
-                            it.substring(4, 6).toLong() * 1000 +
-                            it.substring(7, 9).toLong() * 10
+                        it.substring(4, 6).toLong() * 1000 +
+                        it.substring(7, 9).toLong() * 10
                     val line = it.substring(11)
 
                     SyncedLyrics.Line(startMillis, null, line)
@@ -197,41 +196,47 @@ class SampleMurglar(
         }
     }
 
-    @WorkerThread
-    override fun getTags(track: SampleTrack): Tags {
-        val tags = Tags.Builder()
-            .title(track.title)
-            .subtitle(track.subtitle)
-            .artists(track.artistNames)
-            .genre(track.genre)
-            .explicit(track.explicit)
-            .gain(track.gain)
-            .peak(track.peak)
-            .url(track.serviceUrl)
-            .mediaId(track.mediaId)
+    override suspend fun getTags(track: SampleTrack, parent: Node?) = Tags.Builder().apply {
+        title = track.title
+        subtitle = track.subtitle
+        artists = track.artistNames
+        genre = track.genre
+        explicit = track.explicit
+        gain = track.gain
+        peak = track.peak
+        url = track.serviceUrl
+        mediaId = track.mediaId
 
-        if (!track.hasAlbum)
-            return tags.createTags()
+        when {
+            parent is SampleAlbum -> {
+                val positionInAlbum = getTrackPositionInAlbum(parent.id, track.id)
 
-        tags.album(track.albumName)
-            .albumArtist(track.albumArtist)
-            .trackNumber(track.indexInAlbum)
-            .diskNumber(track.volumeNumber)
-            .releaseDate(track.albumReleaseDate)
+                album = parent.title
+                albumArtist = parent.artistName
+                albumType = parent.type
+                trackNumber = positionInAlbum.trackNumberInVolume
+                diskNumber = positionInAlbum.trackVolumeNumber
+                totalDisks = positionInAlbum.totalDisks
+                totalTracks = positionInAlbum.totalTracks
+                releaseDate = parent.releaseDate
+            }
 
-        val volumesAndTracks = mutableMapOf<Int, Int>()
-        getAlbumTracks(track.albumId!!).forEach {
-            val tracks = volumesAndTracks[it.volumeNumber] ?: 0
-            volumesAndTracks[it.volumeNumber!!] = tracks + 1
+            track.hasAlbum -> {
+                val positionInAlbum = getTrackPositionInAlbum(track.albumId!!, track.id)
+
+                album = track.albumName
+                albumArtist = track.albumArtist
+                albumType = track.albumType
+                trackNumber = track.indexInAlbum
+                diskNumber = track.volumeNumber
+                totalDisks = positionInAlbum.totalDisks
+                totalTracks = positionInAlbum.totalTracks
+                releaseDate = track.albumReleaseDate
+            }
         }
-        tags.totalDisks(volumesAndTracks.keys.size)
-            .totalTracks(volumesAndTracks[track.volumeNumber])
+    }.createTags()
 
-        return tags.createTags()
-    }
-
-    @WorkerThread
-    override fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = mediaIds
+    override suspend fun getTracksByMediaIds(mediaIds: List<String>): List<SampleTrack> = mediaIds
         .map { MediaId.getIds(it).first() }
         .loadPaged(1000) {
             val request = postRequest("$API_DOMAIN/track-entries")
@@ -243,8 +248,7 @@ class SampleMurglar(
 
 
     //region query methods
-    @WorkerThread
-    fun getMyTracks(page: Int): List<SampleTrack> {
+    suspend fun getMyTracks(page: Int): List<SampleTrack> {
         loginResolver.checkLogged()
         val request = getRequest("${API_DOMAIN}/library")
             .addParameter("owner", loginResolver.username)
@@ -255,8 +259,7 @@ class SampleMurglar(
         return response.result.getJsonArray("tracks").toTracks()
     }
 
-    @WorkerThread
-    fun getMyAlbums(): List<SampleAlbum> {
+    suspend fun getMyAlbums(): List<SampleAlbum> {
         loginResolver.checkLogged()
         val request = getRequest("${API_DOMAIN}/library")
             .addParameter("owner", loginResolver.username)
@@ -266,8 +269,7 @@ class SampleMurglar(
         return response.result.getJsonArray("albums").toAlbums()
     }
 
-    @WorkerThread
-    fun getMyArtists(): List<SampleArtist> {
+    suspend fun getMyArtists(): List<SampleArtist> {
         loginResolver.checkLogged()
         val request = getRequest("${API_DOMAIN}/library")
             .addParameter("owner", loginResolver.username)
@@ -277,8 +279,7 @@ class SampleMurglar(
         return response.result.getJsonArray("artists").toArtists()
     }
 
-    @WorkerThread
-    fun getMyPlaylists(): List<SamplePlaylist> {
+    suspend fun getMyPlaylists(): List<SamplePlaylist> {
         loginResolver.checkLogged()
         val request = getRequest("${API_DOMAIN}/library")
             .addParameter("owner", loginResolver.username)
@@ -288,14 +289,11 @@ class SampleMurglar(
         return result.getJsonArray("playlists").toPlaylists()
     }
 
-    @WorkerThread
-    fun getMyPodcasts(): List<SampleAlbum> = getMyPodcastsAndAudiobooks(NodeType.PODCAST)
+    suspend fun getMyPodcasts(): List<SampleAlbum> = getMyPodcastsAndAudiobooks(NodeType.PODCAST)
 
-    @WorkerThread
-    fun getMyAudiobooks(): List<SampleAlbum> = getMyPodcastsAndAudiobooks(NodeType.AUDIOBOOK)
+    suspend fun getMyAudiobooks(): List<SampleAlbum> = getMyPodcastsAndAudiobooks(NodeType.AUDIOBOOK)
 
-    @WorkerThread
-    private fun getMyPodcastsAndAudiobooks(contentType: String): List<SampleAlbum> {
+    private suspend fun getMyPodcastsAndAudiobooks(contentType: String): List<SampleAlbum> {
         loginResolver.checkLogged()
         val request = getRequest("${API_DOMAIN}/library")
             .addParameter("owner", loginResolver.username)
@@ -305,8 +303,7 @@ class SampleMurglar(
         return response.result.getJsonArray("albums").toAlbums()
     }
 
-    @WorkerThread
-    fun getMyHistory(page: Int): List<SampleTrack> {
+    suspend fun getMyHistory(page: Int): List<SampleTrack> {
         loginResolver.checkLogged()
         val request = getRequest("${API_DOMAIN}/library")
             .addParameter("owner", loginResolver.username)
@@ -317,8 +314,7 @@ class SampleMurglar(
         return response.result.getJsonArray("tracks").toTracks()
     }
 
-    @WorkerThread
-    fun getRecommendationsPlaylists(): List<SamplePlaylist> {
+    suspend fun getRecommendationsPlaylists(): List<SamplePlaylist> {
         loginResolver.checkLogged()
         val request = getRequest("${API_DOMAIN}/main")
             .addParameter("what", "home")
@@ -335,44 +331,37 @@ class SampleMurglar(
             .toList()
     }
 
-    @WorkerThread
-    fun searchTracks(query: String, page: Int): List<SampleTrack> {
+    suspend fun searchTracks(query: String, page: Int): List<SampleTrack> {
         val request = searchRequest("tracks", query, page)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObjectOpt("tracks")?.getJsonArrayOpt("items")?.toTracks() ?: emptyList()
     }
 
-    @WorkerThread
-    fun searchAlbums(query: String, page: Int): List<SampleAlbum> {
+    suspend fun searchAlbums(query: String, page: Int): List<SampleAlbum> {
         val request = searchRequest("albums", query, page)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObjectOpt("albums")?.getJsonArrayOpt("items")?.toAlbums() ?: emptyList()
     }
 
-    @WorkerThread
-    fun searchArtists(query: String, page: Int): List<SampleArtist> {
+    suspend fun searchArtists(query: String, page: Int): List<SampleArtist> {
         val request = searchRequest("artists", query, page)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObjectOpt("artists")?.getJsonArrayOpt("items")?.toArtists() ?: emptyList()
     }
 
-    @WorkerThread
-    fun searchPlaylists(query: String, page: Int): List<SamplePlaylist> {
+    suspend fun searchPlaylists(query: String, page: Int): List<SamplePlaylist> {
         val request = searchRequest("playlists", query, page)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObjectOpt("playlists")?.getJsonArrayOpt("items")?.toPlaylists() ?: emptyList()
     }
 
-    @WorkerThread
-    fun searchPodcasts(query: String, page: Int): List<SampleAlbum> =
+    suspend fun searchPodcasts(query: String, page: Int): List<SampleAlbum> =
         searchPodcastsAndAudiobooks(query, page, NodeType.PODCAST)
 
-    @WorkerThread
-    fun searchAudiobooks(query: String, page: Int): List<SampleAlbum> =
+    suspend fun searchAudiobooks(query: String, page: Int): List<SampleAlbum> =
         searchPodcastsAndAudiobooks(query, page, NodeType.AUDIOBOOK)
 
-    @WorkerThread
-    fun searchPodcastsAndAudiobooks(query: String, page: Int, contentType: String): List<SampleAlbum> {
+    suspend fun searchPodcastsAndAudiobooks(query: String, page: Int, contentType: String): List<SampleAlbum> {
         val request = searchRequest(contentType, query, page)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObjectOpt(contentType)
@@ -381,76 +370,65 @@ class SampleMurglar(
             ?: emptyList()
     }
 
-    @WorkerThread
-    fun getArtist(artistId: String): SampleArtist {
+    suspend fun getArtist(artistId: String): SampleArtist {
         val request = artistRequest(artistId, "")
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObject("artist").toArtist()
     }
 
-    @WorkerThread
-    fun getArtistPopularTracks(artistId: String): List<SampleTrack> {
+    suspend fun getArtistPopularTracks(artistId: String): List<SampleTrack> {
         val request = artistRequest(artistId, "tracks")
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonArray("tracks").toTracks()
     }
 
-    @WorkerThread
-    fun getArtistAlbums(artistId: String): List<SampleAlbum> = getArtistAlbums(artistId, "albums")
+    suspend fun getArtistAlbums(artistId: String): List<SampleAlbum> = getArtistAlbums(artistId, "albums")
 
-    @WorkerThread
-    fun getArtistCompilations(artistId: String): List<SampleAlbum> = getArtistAlbums(artistId, "alsoAlbums")
+    suspend fun getArtistCompilations(artistId: String): List<SampleAlbum> = getArtistAlbums(artistId, "alsoAlbums")
 
-    private fun getArtistAlbums(artistId: String, albumsField: String): List<SampleAlbum> {
+    private suspend fun getArtistAlbums(artistId: String, albumsField: String): List<SampleAlbum> {
         val request = artistRequest(artistId, "albums")
         val result = network.execute(request, ResponseConverters.asJsonObject()).result
         return result.getJsonArray(albumsField).toAlbums()
     }
 
-    @WorkerThread
-    fun getArtistPlaylists(artistId: String): List<SamplePlaylist> {
+    suspend fun getArtistPlaylists(artistId: String): List<SamplePlaylist> {
         val request = artistRequest(artistId, "")
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonArray("playlists").toPlaylists()
     }
 
-    @WorkerThread
-    fun getArtistSimilarArtists(artistId: String): List<SampleArtist> {
+    suspend fun getArtistSimilarArtists(artistId: String): List<SampleArtist> {
         val request = artistRequest(artistId, "")
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonArray("allSimilar").toArtists()
     }
 
-    @WorkerThread
-    fun getAlbum(albumId: String): SampleAlbum {
+    suspend fun getAlbum(albumId: String): SampleAlbum {
         val request = albumRequest(albumId)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.toAlbum() ?: error("Can't get album $albumId!")
     }
 
-    @WorkerThread
-    fun getAlbumTracks(albumId: String): List<SampleTrack> {
+    suspend fun getAlbumTracks(albumId: String): List<SampleTrack> {
         val request = albumRequest(albumId)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonArray("tracks").toTracks()
     }
 
-    @WorkerThread
-    fun getPlaylist(ownerLogin: String, playlistId: String): SamplePlaylist {
+    suspend fun getPlaylist(ownerLogin: String, playlistId: String): SamplePlaylist {
         val request = playlistRequest(ownerLogin, playlistId)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObject("playlist").toPlaylist() ?: error("Can't get playlist $playlistId!")
     }
 
-    @WorkerThread
-    fun getPlaylistTracks(ownerLogin: String, playlistId: String, page: Int): List<SampleTrack> {
+    suspend fun getPlaylistTracks(ownerLogin: String, playlistId: String, page: Int): List<SampleTrack> {
         val request = playlistRequest(ownerLogin, playlistId, page)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.getJsonObject("playlist").getJsonArray("tracks").toTracks()
     }
 
-    @WorkerThread
-    fun getTrack(trackId: String, albumId: String?): SampleTrack {
+    suspend fun getTrack(trackId: String, albumId: String?): SampleTrack {
         val request = trackRequest(trackId, albumId)
         val response = network.execute(request, ResponseConverters.asJsonObject())
         val track = response.result.getJsonObject("track")
@@ -475,8 +453,7 @@ class SampleMurglar(
 
     private lateinit var radioLibrary: RadioLibrary
 
-    @WorkerThread
-    fun getRadioLibrary(): RadioLibrary {
+    suspend fun getRadioLibrary(): RadioLibrary {
         if (::radioLibrary.isInitialized)
             return radioLibrary
 
@@ -500,8 +477,9 @@ class SampleMurglar(
         return radioLibrary
     }
 
-    @WorkerThread
-    fun getRadioNextTracks(radio: SampleRadio): SampleRadioUpdate {
+    suspend fun getRadioNextTracks(radio: SampleRadio, settingsUpdate: RadioSettingsUpdate?): SampleRadioUpdate {
+        // TODO settingsUpdate usage example
+
         val request = getRequest("${API_V2_DOMAIN}/radio/${radio.type}/${radio.tag}/tracks")
             .addParameter("queue", radio.queue)
             .build()
@@ -514,8 +492,7 @@ class SampleMurglar(
         return SampleRadioUpdate(updatedRadio, tracks)
     }
 
-    @WorkerThread
-    fun addTrackToFavorite(track: SampleTrack) {
+    suspend fun addTrackToFavorite(track: SampleTrack) {
         loginResolver.checkLogged()
         check(track.nodeType == NodeType.TRACK) { "Only tracks can be added to favorite!" }
         val builder = changeLibraryRequest("add")
@@ -523,8 +500,7 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun removeTrackFromFavorite(track: SampleTrack) {
+    suspend fun removeTrackFromFavorite(track: SampleTrack) {
         loginResolver.checkLogged()
         check(track.nodeType == NodeType.TRACK) { "Only tracks can be removed from favorite!" }
         val builder = changeLibraryRequest("remove")
@@ -532,24 +508,21 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun addAlbumToFavorite(album: SampleAlbum) {
+    suspend fun addAlbumToFavorite(album: SampleAlbum) {
         loginResolver.checkLogged()
         val builder = changeLibraryRequest("add")
             .addParameter("albumId", album.id)
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun removeAlbumFromFavorite(album: SampleAlbum) {
+    suspend fun removeAlbumFromFavorite(album: SampleAlbum) {
         loginResolver.checkLogged()
         val builder = changeLibraryRequest("remove")
             .addParameter("albumId", album.id)
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun addPlaylistToFavorite(playlist: SamplePlaylist) {
+    suspend fun addPlaylistToFavorite(playlist: SamplePlaylist) {
         loginResolver.checkLogged()
         val builder = changeLibraryRequest("add")
             .addParameter("playlistId", playlist.id)
@@ -557,8 +530,7 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun removePlaylistFromFavorite(playlist: SamplePlaylist) {
+    suspend fun removePlaylistFromFavorite(playlist: SamplePlaylist) {
         loginResolver.checkLogged()
         val builder = changeLibraryRequest("remove")
             .addParameter("playlistId", playlist.id)
@@ -566,24 +538,21 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun addArtistToFavorite(artist: SampleArtist) {
+    suspend fun addArtistToFavorite(artist: SampleArtist) {
         loginResolver.checkLogged()
         val builder = changeLibraryRequest("add")
             .addParameter("artistId", artist.id)
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun removeArtistFromFavorite(artist: SampleArtist) {
+    suspend fun removeArtistFromFavorite(artist: SampleArtist) {
         loginResolver.checkLogged()
         val builder = changeLibraryRequest("remove")
             .addParameter("artistId", artist.id)
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun reportTrackStart(track: SampleTrack) {
+    suspend fun reportTrackStart(track: SampleTrack) {
         loginResolver.checkLogged()
         val url = "${API_V2_DOMAIN}/track/${track.fullId()}/feedback/start"
         val builder = postRequest(url)
@@ -591,8 +560,7 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun reportTrackEnd(track: SampleTrack, endTimeMs: Int) {
+    suspend fun reportTrackEnd(track: SampleTrack, endTimeMs: Int) {
         loginResolver.checkLogged()
         val url = "${API_V2_DOMAIN}/track/${track.fullId()}/feedback/end"
         val builder = postRequest(url)
@@ -601,8 +569,7 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun reportRadioStart(radio: SampleRadio, track: SampleTrack) {
+    suspend fun reportRadioStart(radio: SampleRadio, track: SampleTrack) {
         loginResolver.checkLogged()
         val url = "${API_V2_DOMAIN}/radio/${radio.type}/${radio.tag}/feedback/radioStarted/${track.fullId()}"
         val builder = postRequest(url)
@@ -610,8 +577,7 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun reportRadioTrackStart(radio: SampleRadio, track: SampleTrack) {
+    suspend fun reportRadioTrackStart(radio: SampleRadio, track: SampleTrack) {
         loginResolver.checkLogged()
         val url = "${API_V2_DOMAIN}/radio/${radio.type}/${radio.tag}/feedback/trackStarted/${track.fullId()}"
         val builder = postRequest(url)
@@ -623,8 +589,7 @@ class SampleMurglar(
         executeLibraryRequest(builder)
     }
 
-    @WorkerThread
-    fun reportRadioTrackEnd(radio: SampleRadio, track: SampleTrack, endTimeMs: Int) {
+    suspend fun reportRadioTrackEnd(radio: SampleRadio, track: SampleTrack, endTimeMs: Int) {
         loginResolver.checkLogged()
         val url = "${API_V2_DOMAIN}/radio/${radio.type}/${radio.tag}/feedback/trackFinished/${track.fullId()}"
         val builder = postRequest(url)
@@ -637,14 +602,13 @@ class SampleMurglar(
     }
     //endregion query methods
 
-    @WorkerThread
-    fun loadUsername(): String? {
+    suspend fun loadUsername(): String? {
         val request = getRequest("${API_DOMAIN}/me").build()
         val response = network.execute(request, ResponseConverters.asJsonObject())
         return response.result.takeIf { response.isSuccessful }?.getString("username")
     }
 
-    private fun executeLibraryRequest(builder: NetworkRequest.Builder) {
+    private suspend fun executeLibraryRequest(builder: NetworkRequest.Builder) {
         val response = network.execute(builder.build(), ResponseConverters.asJsonObject())
         val result = response.result
         when {
@@ -655,6 +619,32 @@ class SampleMurglar(
             check(it) { "Request failed: '$response'!" }
         }
     }
+
+    private suspend fun getTrackPositionInAlbum(albumId: String, trackId: String): TrackPositionInAlbum {
+        val volumesAndTracks = mutableMapOf<Int, Int>()
+        var trackNumberInVolume: Int? = null
+        var trackVolumeNumber: Int? = null
+        getAlbumTracks(albumId).forEach {
+            volumesAndTracks.merge(it.volumeNumber!!, 1, Int::plus)
+            if (it.id == trackId) {
+                trackNumberInVolume = it.indexInAlbum
+                trackVolumeNumber = it.volumeNumber
+            }
+        }
+        return TrackPositionInAlbum(
+            totalDisks = volumesAndTracks.keys.size,
+            totalTracks = volumesAndTracks[trackVolumeNumber],
+            trackNumberInVolume = trackNumberInVolume,
+            trackVolumeNumber = trackVolumeNumber
+        )
+    }
+
+    private data class TrackPositionInAlbum(
+        val totalDisks: Int?,
+        val totalTracks: Int?,
+        val trackNumberInVolume: Int?,
+        val trackVolumeNumber: Int?
+    )
 
     private fun JsonArray.toTracks(): List<SampleTrack> = asSequence()
         .map { it.jsonObject }
@@ -696,7 +686,7 @@ class SampleMurglar(
         val serviceUrl = "$SAMPLE_DOMAIN/users/$ownerLogin/playlists/$id"
 
         return SamplePlaylist(
-            id, title, description, smallCoverUrl, bigCoverUrl, trackCount, ownerLogin, ownerId, serviceUrl
+            id, title, description, trackCount, smallCoverUrl, bigCoverUrl, serviceUrl, ownerLogin, ownerId
         )
     }
 
@@ -717,7 +707,7 @@ class SampleMurglar(
 
         val serviceUrl = "$SAMPLE_DOMAIN/artist/$id"
 
-        return SampleArtist(id, name, smallCoverUrl, bigCoverUrl, albumsCount, tracksCount, serviceUrl)
+        return SampleArtist(id, name, smallCoverUrl, bigCoverUrl, serviceUrl, albumsCount, tracksCount)
     }
 
     private fun JsonObject.toAlbum(): SampleAlbum? {
@@ -738,17 +728,21 @@ class SampleMurglar(
 
         val genre = getStringOpt("genre")
 
-        val type = when (getStringOpt("type")) {
-            "podcast" -> NodeType.PODCAST
-            "audiobook" -> NodeType.AUDIOBOOK
-            else -> NodeType.ALBUM
+        val (nodeType, albumType) = when (getStringOpt("type")) {
+            "podcast" -> NodeType.PODCAST to AlbumType.ALBUM
+            "audiobook" -> NodeType.AUDIOBOOK to AlbumType.ALBUM
+            "single" -> NodeType.ALBUM to AlbumType.SINGLE
+            "compilation" -> NodeType.ALBUM to AlbumType.COMPILATION
+            "ep" -> NodeType.ALBUM to AlbumType.EP
+            else -> NodeType.ALBUM to AlbumType.ALBUM
         }
+
         val explicit = getStringOpt("contentWarning") == "explicit"
         val serviceUrl = "$SAMPLE_DOMAIN/album/$albumId"
 
         return SampleAlbum(
-            albumId, album, albumAdditionalInfo, releaseDate, smallCoverUrl, bigCoverUrl, tracksCount,
-            artistId, artistName, genre, type, explicit, serviceUrl
+            albumId, album, albumAdditionalInfo, albumType, artistId, artistName, tracksCount, releaseDate,
+            genre, explicit, smallCoverUrl, bigCoverUrl, serviceUrl, nodeType
         )
     }
 
@@ -774,10 +768,10 @@ class SampleMurglar(
         val lyricsId = getJsonObjectOpt("lyricsInfo")?.getStringOpt("lyricsId")
 
         var gain: String? = null
-        var peak: String? = null
-        getJsonObjectOpt("normalization")?.let {
-            gain = it.getString("gain")
-            peak = it.getString("peak")
+        var peak: Double? = null
+        getJsonObjectOpt("r128")?.let {
+            gain = r128GainToTagsGain(it.getDouble("i"))
+            peak = r128PeakToTagsPeak(it.getDouble("tp"))
         }
 
         val hqTag = "${Extension.MP3} ${Bitrate.B_320.text}"
@@ -809,8 +803,8 @@ class SampleMurglar(
 
         return SampleTrack(
             trackId, title, additionalInfo, artistIds, artistNames, album?.id, album?.title, album?.releaseDate,
-            album?.artistName, album?.description, indexInAlbum, volumeNumber, duration, album?.genre,
-            explicit, lyricsId, gain, peak, sources, type, mediaId, smallCoverUrl, bigCoverUrl, serviceUrl
+            album?.artistName, album?.type, album?.description, indexInAlbum, volumeNumber, duration, album?.genre,
+            explicit, lyricsId, gain, peak, sources, mediaId, smallCoverUrl, bigCoverUrl, serviceUrl, type
         )
     }
 
@@ -874,7 +868,7 @@ class SampleMurglar(
             .method(method)
             .url(url)
             .addHeaders(baseHeaders())
-            .userAgent(MurglarLibUtils.CHROME_USER_AGENT)
+            .userAgent(MurglarLibUtils.CHROME_DESKTOP_USER_AGENT)
 
         when {
             url.startsWith(API_DOMAIN) -> builder.addParameter("lang", locale.language)

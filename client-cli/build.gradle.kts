@@ -8,5 +8,7 @@ dependencies {
 
     implementation(project(":sample-core"))
 
-    implementation(catalog.http.client)
+    implementation(catalog.ktor)
+    implementation(catalog.ktor.logging)
+    implementation(catalog.ktor.encoding)
 }

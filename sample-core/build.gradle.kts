@@ -5,6 +5,6 @@ plugins {
 murglarPlugin {
     id = "sample"
     name = "Sample"
-    version = "2"
-    murglarClass = "com.badmanners.murglar.lib.sample.SampleMurglar"
+    version = catalog.versions.sample.map(String::toInt)
+    entryPointClass = "com.badmanners.murglar.lib.sample.SampleMurglar"
 }
