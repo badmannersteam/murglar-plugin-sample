@@ -181,8 +181,8 @@ class SampleNodeResolver(
                 "*sample.com/track/<trackId:\\d+>*"
             ),
             events = listOf(
-                EventConfig(TrackStart::class) { to<SampleTrack>().handleStartEvent() },
-                EventConfig(TrackEnd::class) { to<SampleTrack>().handleEndEvent(it.endTimeMs) }
+                EventConfig(TrackStart::class) { _, _ -> to<SampleTrack>().handleStartEvent() },
+                EventConfig(TrackEnd::class) { event, _ -> to<SampleTrack>().handleEndEvent(event.endTimeMs) }
             ),
             nodeSupplier = ::getTrack
         ),

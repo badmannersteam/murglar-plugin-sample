@@ -28,11 +28,11 @@ import com.badmanners.murglar.lib.core.preference.Preference
 import com.badmanners.murglar.lib.core.preference.PreferenceMiddleware
 import com.badmanners.murglar.lib.core.service.BaseMurglar
 import com.badmanners.murglar.lib.core.utils.MediaId
-import com.badmanners.murglar.lib.core.utils.MurglarLibUtils
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.loadPaged
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.mask
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.normalize
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.prepareEntriesString
+import com.badmanners.murglar.lib.core.utils.UserAgent
 import com.badmanners.murglar.lib.core.utils.getBoolean
 import com.badmanners.murglar.lib.core.utils.getBooleanOpt
 import com.badmanners.murglar.lib.core.utils.getDouble
@@ -868,7 +868,7 @@ class SampleMurglar(
             .method(method)
             .url(url)
             .addHeaders(baseHeaders())
-            .userAgent(MurglarLibUtils.CHROME_DESKTOP_USER_AGENT)
+            .userAgent(UserAgent.CHROME_DESKTOP_USER_AGENT)
 
         when {
             url.startsWith(API_DOMAIN) -> builder.addParameter("lang", locale.language)

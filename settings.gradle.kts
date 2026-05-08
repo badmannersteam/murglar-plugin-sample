@@ -27,8 +27,8 @@ pluginManagement {
 dependencyResolutionManagement {
     versionCatalogs {
         create("catalog") {
-            version("murglar-plugins", "7.0")
-            version("sample", "3")  // use a single number
+            version("murglar-plugins", "8.0")
+            version("sample", "4")  // use a single number
 
             // for core module
             plugin("murglar-plugin-core", "murglar-gradle-plugin-core").versionRef("murglar-plugins")
@@ -38,7 +38,7 @@ dependencyResolutionManagement {
             // for CLI client
             library("murglar-core", "com.github.badmannersteam.murglar-plugins", "core").versionRef("murglar-plugins")
 
-            version("ktor", "3.2.3")
+            version("ktor", "3.4.3")
             library("ktor", "io.ktor", "ktor-client-okhttp").versionRef("ktor")
             library("ktor-logging", "io.ktor", "ktor-client-logging").versionRef("ktor")
             library("ktor-encoding", "io.ktor", "ktor-client-encoding").versionRef("ktor")

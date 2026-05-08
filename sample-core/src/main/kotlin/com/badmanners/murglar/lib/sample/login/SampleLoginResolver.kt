@@ -17,8 +17,8 @@ import com.badmanners.murglar.lib.core.network.NetworkRequest
 import com.badmanners.murglar.lib.core.network.ResponseConverters
 import com.badmanners.murglar.lib.core.notification.NotificationMiddleware
 import com.badmanners.murglar.lib.core.preference.PreferenceMiddleware
-import com.badmanners.murglar.lib.core.utils.MurglarLibUtils
 import com.badmanners.murglar.lib.core.utils.MurglarLibUtils.setHttpOnlySafely
+import com.badmanners.murglar.lib.core.utils.UserAgent
 import com.badmanners.murglar.lib.core.utils.getJsonObject
 import com.badmanners.murglar.lib.core.utils.getString
 import com.badmanners.murglar.lib.core.utils.getStringOpt
@@ -103,7 +103,7 @@ class SampleLoginResolver(
 
         val success = webViewProvider.startWebView(
             enableJS = true,
-            userAgent = MurglarLibUtils.CHROME_DESKTOP_USER_AGENT,
+            userAgent = UserAgent.CHROME_DESKTOP_USER_AGENT,
             startUrl = startUrl,
             domainsForCookiesSync = listOf("https://sample.com/"),
             resolver = object : UrlLoadPolicyResolver {
