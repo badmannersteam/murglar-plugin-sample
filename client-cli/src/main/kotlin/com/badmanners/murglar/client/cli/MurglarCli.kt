@@ -86,7 +86,7 @@ object MurglarCli {
 
         val decryptor = murglar.decryptor
         val decryptedContent = when (decryptor.isEncrypted(this, source)) {
-            true -> decryptor.decrypt(result, 0, result.size, this, resolvedSource)
+            true -> decryptor.decrypt(result, 0, result.size, resolvedSource.url!!)
             false -> result
         }
 

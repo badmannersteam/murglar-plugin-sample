@@ -16,7 +16,12 @@ import com.badmanners.murglar.lib.core.model.tag.r128PeakToTagsPeak
 import com.badmanners.murglar.lib.core.model.track.source.Bitrate
 import com.badmanners.murglar.lib.core.model.track.source.Container
 import com.badmanners.murglar.lib.core.model.track.source.Extension
+import com.badmanners.murglar.lib.core.model.track.source.QualityTier.HIGH_QUALITY
+import com.badmanners.murglar.lib.core.model.track.source.QualityTier.NORMAL_QUALITY
 import com.badmanners.murglar.lib.core.model.track.source.Source
+import com.badmanners.murglar.lib.core.model.track.source.SourceFormat
+import com.badmanners.murglar.lib.core.model.track.source.SourceFormat.SourceFormatAvailability.AVAILABLE
+import com.badmanners.murglar.lib.core.model.track.source.SourceFormat.SourceFormatAvailability.REQUIRES_SERVICE_SUBSCRIPTION
 import com.badmanners.murglar.lib.core.network.NetworkMiddleware
 import com.badmanners.murglar.lib.core.network.NetworkRequest
 import com.badmanners.murglar.lib.core.network.NetworkResponse
@@ -120,11 +125,16 @@ class SampleMurglar(
             //more preferences
         }
 
-    override val possibleFormats = listOf(
-        Extension.UNKNOWN to Bitrate.B_UNKNOWN,
-        Extension.MP3 to Bitrate.B_320,
-        Extension.MP3 to Bitrate.B_192
-    )
+    override val possibleFormats: List<SourceFormat>
+        get() {
+            val hasPremium = true /*loginResolver.hasPremium or anything else*/
+            val availability = if (hasPremium) AVAILABLE else REQUIRES_SERVICE_SUBSCRIPTION
+            return listOf(
+                SourceFormat(Extension.UNKNOWN, Bitrate.B_UNKNOWN, HIGH_QUALITY, availability),
+                SourceFormat(Extension.MP3, Bitrate.B_320, HIGH_QUALITY, availability),
+                SourceFormat(Extension.MP3, Bitrate.B_128, NORMAL_QUALITY, AVAILABLE)
+            )
+        }
 
     override suspend fun onCreate() {
         if (!loginResolver.isLogged)
@@ -775,9 +785,9 @@ class SampleMurglar(
         }
 
         val hqTag = "${Extension.MP3} ${Bitrate.B_320.text}"
-        val hqSource = Source("mp3_320", null, hqTag, Extension.MP3, Container.PROGRESSIVE, Bitrate.B_320)
+        val hqSource = Source("mp3_320", null, hqTag, Extension.MP3, Container.PROGRESSIVE, Bitrate.B_320, HIGH_QUALITY)
         val lqTag = "${Extension.MP3} ${Bitrate.B_192.text}"
-        val lqSource = Source("mp3_192", null, lqTag, Extension.MP3, Container.PROGRESSIVE, Bitrate.B_192)
+        val lqSource = Source("mp3_192", null, lqTag, Extension.MP3, Container.PROGRESSIVE, Bitrate.B_192, NORMAL_QUALITY)
         val sources = listOf(hqSource, lqSource)
 
         val type = when (getStringOpt("type")) {

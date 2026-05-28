@@ -27,8 +27,11 @@ class SampleDecryptor(private val logger: LoggerMiddleware) : Decryptor<SampleTr
 
     override val decryptionChunkSize = CHUNK_SIZE
 
-    override suspend fun decrypt(content: ByteArray, offset: Int, length: Int, track: SampleTrack, source: Source): ByteArray {
-        val cipher = buildCipher(track.id)
+    override suspend fun decrypt(content: ByteArray, offset: Int, length: Int, url: String): ByteArray {
+        val trackId = url.substringAfterLast("#", "").takeIf { it.isNotBlank() }
+        checkNotNull(trackId) { "No track id in url: $url" }
+
+        val cipher = buildCipher(trackId)
         val result = ByteArrayOutputStream(length)
         try {
             var i = 0

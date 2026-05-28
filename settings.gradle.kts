@@ -27,8 +27,8 @@ pluginManagement {
 dependencyResolutionManagement {
     versionCatalogs {
         create("catalog") {
-            version("murglar-plugins", "8.0")
-            version("sample", "4")  // use a single number
+            version("murglar-plugins", "9.0")
+            version("sample", "5")  // use a single number
 
             // for core module
             plugin("murglar-plugin-core", "murglar-gradle-plugin-core").versionRef("murglar-plugins")

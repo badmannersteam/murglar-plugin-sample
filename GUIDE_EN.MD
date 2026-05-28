@@ -223,11 +223,16 @@ For example, for a service that offers the possibility to download the source tr
 (in a format and bitrate unknown in advance and bitrate), as well as 320 MP3 and 192 MP3, the list would look like this:
 
 ```kotlin
-override val possibleFormats = listOf(
-    Extension.UNKNOWN to Bitrate.B_UNKNOWN,
-    Extension.MP3 to Bitrate.B_320,
-    Extension.MP3 to Bitrate.B_192
-)
+override val possibleFormats: List<SourceFormat>
+    get() {
+        val hasPremium = loginResolver.hasPremium /* or anything else */
+        val availability = if (hasPremium) AVAILABLE else REQUIRES_SERVICE_SUBSCRIPTION
+        return listOf(
+            SourceFormat(Extension.UNKNOWN, Bitrate.B_UNKNOWN, HIGH_QUALITY, availability),
+            SourceFormat(Extension.MP3, Bitrate.B_320, HIGH_QUALITY, availability),
+            SourceFormat(Extension.MP3, Bitrate.B_128, NORMAL_QUALITY, AVAILABLE)
+        )
+    }
 ```
 
 ### Lifecycle
